@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.db
+.DS_Store
+node_modules/
+dist/
+qdrant_local/
+research.db
+req.json
+test_*.py
