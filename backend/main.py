@@ -41,6 +41,7 @@ app.add_middleware(
  allow_origins=[
     "http://localhost:5173",
     "http://localhost:4173",
+    settings.frontend_url,
     # Add after Vercel deploy:
     # "https://research-agent-yourusername.vercel.app",
 ],
