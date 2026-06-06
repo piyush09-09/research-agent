@@ -5,8 +5,16 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from rag.embeddings import embed_text, embed_texts
 from core.config import settings
 
-client = QdrantClient(path = settings.qdrant_path)
+# Use cloud if URL is set, otherwise local
+if settings.qdrant_url:
+    client = QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key
+    )
+else:
+    client = QdrantClient(path=settings.qdrant_path)
 
+    
 COLLECTION = "research_docs"
 VECTOR_SIZE = 384
 

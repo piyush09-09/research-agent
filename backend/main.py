@@ -38,12 +38,12 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # ── CORS — lock to your frontend URLs ──
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:4173",
-        # Add your production frontend URL here when deploying:
-        # "https://your-app.vercel.app",
-    ],
+ allow_origins=[
+    "http://localhost:5173",
+    "http://localhost:4173",
+    # Add after Vercel deploy:
+    # "https://research-agent-yourusername.vercel.app",
+],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization"],
 )
