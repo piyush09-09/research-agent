@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Logo from "../components/Logo";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 export default function Login() {
   const [searchParams] = useSearchParams();
   const [isSignup, setIsSignup] = useState(searchParams.get("mode") === "signup");
@@ -21,14 +23,34 @@ export default function Login() {
     setError("");
     setLoading(true);
 
-    // TODO: Wire to backend auth endpoint
-    // For now, simulate login and go to dashboard
-    setTimeout(() => {
-      localStorage.setItem("token", "demo-token");
-      localStorage.setItem("user", JSON.stringify({ name: name || "User", email }));
-      setLoading(false);
+    try {
+      const endpoint = isSignup ? "/auth/signup" : "/auth/login";
+      const body = isSignup
+        ? { name, email, password }
+        : { email, password };
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.detail || "Something went wrong");
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/app");
-    }, 800);
+    } catch (err) {
+      setError("Cannot connect to server. Is the backend running?");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

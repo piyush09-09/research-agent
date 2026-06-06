@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export function useSSE() {
   const [tokens, setTokens] = useState("");
@@ -22,7 +23,7 @@ export function useSSE() {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await fetch("http://localhost:8000/research", {
+      const response = await fetch(`${API_URL}/research`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
