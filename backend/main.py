@@ -12,7 +12,7 @@ from agents.graph import build_graph, ResearchState
 from agents.writer import llm as writer_llm
 from core.database import init_db
 from core.config import settings
-from auth import create_user, login_user, decode_token
+from auth import create_user, login_user, decode_token, save_session, get_user_history, get_session_by_id, delete_session
 
 
 # ── Rate Limiter ──
@@ -120,6 +120,32 @@ async def login(request: Request, body: LoginRequest):
         raise HTTPException(status_code=401, detail=result["error"])
     return result
 
+@app.get("/history")
+@limiter.limit("30/minute")
+async def history(request: Request, user: dict = Depends(get_current_user)):
+    user_id = int(user["sub"])
+    sessions = await get_user_history(user_id)
+    return {"sessions": sessions}
+
+
+@app.get("/history/{session_id}")
+@limiter.limit("30/minute")
+async def get_history_item(request: Request, session_id: int, user: dict = Depends(get_current_user)):
+    user_id = int(user["sub"])
+    session_data = await get_session_by_id(session_id, user_id)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session_data
+
+
+@app.delete("/history/{session_id}")
+@limiter.limit("10/minute")
+async def delete_history_item(request: Request, session_id: int, user: dict = Depends(get_current_user)):
+    user_id = int(user["sub"])
+    deleted = await delete_session(session_id, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "deleted"}
 
 # ── Protected research endpoint ──
 @app.post("/research")
@@ -278,6 +304,7 @@ Summarize key findings, cite sources."""
 
         # Step 5: RAGAS Evaluation
         yield sse_event({"type": "step", "label": "Running RAGAS evaluation..."})
+        eval_scores = {}
 
         from eval.ragas_eval import run_evaluation
         try:
@@ -290,6 +317,20 @@ Summarize key findings, cite sources."""
         except Exception as e:
             print(f"[EVAL] Failed: {e}")
             yield sse_event({"type": "eval", "scores": {"overall": -1}})
+        
+        # Save to history
+        try:
+            user_id = int(user.get("sub", 0))
+            saved = await save_session(
+                user_id=user_id,
+                query=query,
+                word_limit=word_limit,
+                report=full_report,
+                eval_scores=eval_scores if 'eval_scores' in dir() else {}
+            )
+            yield sse_event({"type": "step", "label": "Research saved to history"})
+        except Exception as e:
+            print(f"[SAVE] Failed to save session: {e}")
 
         yield sse_event({"type": "done", "report": full_report})
 

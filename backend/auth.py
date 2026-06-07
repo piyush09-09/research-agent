@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float,ForeignKey
 from sqlalchemy import select
 from core.database import Base, async_session
 from core.config import settings
@@ -21,6 +21,19 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class ResearchSession(Base):
+    __tablename__ = "research_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    query = Column(String, nullable=False)
+    word_limit = Column(Integer, default=500)
+    report = Column(Text, nullable=False)
+    faithfulness = Column(Float, nullable=True)
+    answer_relevancy = Column(Float, nullable=True)
+    context_precision = Column(Float, nullable=True)
+    overall_score = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -79,3 +92,90 @@ async def login_user(email: str, password: str) -> dict:
 
         token = create_token(user.id, user.email, user.name)
         return {"token": token, "user": {"name": user.name, "email": user.email}}
+    
+
+async def save_session(user_id: int, query: str, word_limit: int, report: str, eval_scores: dict) -> dict:
+    async with async_session() as session:
+        research = ResearchSession(
+            user_id=user_id,
+            query=query,
+            word_limit=word_limit,
+            report=report,
+            faithfulness=eval_scores.get("faithfulness"),
+            answer_relevancy=eval_scores.get("answer_relevancy"),
+            context_precision=eval_scores.get("context_precision"),
+            overall_score=eval_scores.get("overall"),
+        )
+        session.add(research)
+        await session.commit()
+        await session.refresh(research)
+        return {"id": research.id, "query": research.query, "created_at": str(research.created_at)}
+
+
+async def get_user_history(user_id: int) -> list:
+    async with async_session() as session:
+        result = await session.execute(
+            select(ResearchSession)
+            .where(ResearchSession.user_id == user_id)
+            .order_by(ResearchSession.created_at.desc())
+            .limit(50)
+        )
+        sessions = result.scalars().all()
+        return [
+            {
+                "id": s.id,
+                "query": s.query,
+                "word_limit": s.word_limit,
+                "report": s.report,
+                "eval_scores": {
+                    "faithfulness": s.faithfulness,
+                    "answer_relevancy": s.answer_relevancy,
+                    "context_precision": s.context_precision,
+                    "overall": s.overall_score,
+                },
+                "created_at": str(s.created_at),
+            }
+            for s in sessions
+        ]
+
+
+async def get_session_by_id(session_id: int, user_id: int) -> dict | None:
+    async with async_session() as session:
+        result = await session.execute(
+            select(ResearchSession).where(
+                ResearchSession.id == session_id,
+                ResearchSession.user_id == user_id
+            )
+        )
+        s = result.scalar_one_or_none()
+        if not s:
+            return None
+        return {
+            "id": s.id,
+            "query": s.query,
+            "word_limit": s.word_limit,
+            "report": s.report,
+            "eval_scores": {
+                "faithfulness": s.faithfulness,
+                "answer_relevancy": s.answer_relevancy,
+                "context_precision": s.context_precision,
+                "overall": s.overall_score,
+            },
+            "created_at": str(s.created_at),
+        }
+
+
+async def delete_session(session_id: int, user_id: int) -> bool:
+    async with async_session() as session:
+        result = await session.execute(
+            select(ResearchSession).where(
+                ResearchSession.id == session_id,
+                ResearchSession.user_id == user_id
+            )
+        )
+        research = result.scalar_one_or_none()
+        if not research:
+            return False
+        await session.delete(research)
+        await session.commit()
+        return True
